@@ -1,41 +1,90 @@
 # Global variable to store the Sudoku grid
+from collections import defaultdict
+
+
 sudoku_grid = []
 
 def sudoku_input():
     """
-    Function to take input for a Sudoku puzzle.
-    The input should be 9 lines of 9 digits (0-9), where 0 represents an empty cell.
+    Function to take input for a Sudoku puzzle row by row.
+    Each row should contain exactly 9 digits (0-9), where 0 represents an empty cell.
     """
     global sudoku_grid
-    print("Enter the Sudoku grid row by row (9 rows, each with 9 digits). Use '0' to represent empty squares:")
+    print("Enter the Sudoku grid row by row (use '0' for empty squares):")
     sudoku_grid = []
     for i in range(9):
         while True:
-            row = input(f"Row {i + 1}: ")
-            if len(row) == 9 and all(ch.isdigit() and 0 <= int(ch) <= 9 for ch in row):
-                sudoku_grid.append([int(ch) for ch in row])
+            row_input = input(f"Row {i + 1}: ").strip()
+            if len(row_input) == 9 and all(ch.isdigit() and 0 <= int(ch) <= 9 for ch in row_input):
+                sudoku_grid.append([int(ch) for ch in row_input])
                 break
             else:
-                print("Invalid input. Please enter exactly 9 digits (0-9).")
+                print("Invalid input. Please enter exactly 9 digits (0-9) for the row.")                
 
 def solve_sudoku(grid):
     """
-    Recursive backtracking function to solve the Sudoku puzzle.
+    Highly optimized Sudoku solver using backtracking with constraint propagation and bitwise operations.
     Returns True if a solution is found, otherwise False.
     """
+
+    # Precompute bitmasks for rows, columns, and subgrids
+    row_masks = [0] * 9
+    col_masks = [0] * 9
+    subgrid_masks = [0] * 9
+
+    # Initialize masks based on the initial grid
+    for r in range(9):
+        for c in range(9):
+            num = grid[r][c]
+            if num != 0:
+                bit = 1 << num
+                row_masks[r] |= bit
+                col_masks[c] |= bit
+                subgrid_masks[(r // 3) * 3 + (c // 3)] |= bit
+
     # Find the next empty cell
-    for row in range(9):
-        for col in range(9):
-            if grid[row][col] == 0:
-                # Try all possible numbers (1-9) in the empty cell
-                for num in range(1, 10):
-                    if is_valid_move(grid, row, col, num):
-                        grid[row][col] = num
-                        if solve_sudoku(grid):
-                            return True
-                        grid[row][col] = 0  # Backtrack
-                return False  # No valid number found, trigger backtracking
-    return True  # Puzzle solved
+    def find_empty_cell(grid):
+        for row in range(9):
+            for col in range(9):
+                if grid[row][col] == 0:
+                    return row, col
+        return None
+
+    # Recursive backtracking
+    def backtrack(grid):
+        empty_cell = find_empty_cell(grid)
+        if not empty_cell:
+            return True  # Solved
+
+        row, col = empty_cell
+        subgrid_index = (row // 3) * 3 + (col // 3)
+        available = ~(row_masks[row] | col_masks[col] | subgrid_masks[subgrid_index]) & 0x3FE
+
+        while available:
+            bit = available & -available  # Extract the lowest set bit
+            num = bit.bit_length() - 1
+
+            # Place the number
+            grid[row][col] = num
+            row_masks[row] |= bit
+            col_masks[col] |= bit
+            subgrid_masks[subgrid_index] |= bit
+
+            if backtrack(grid):
+                return True
+
+            # Backtrack
+            grid[row][col] = 0
+            row_masks[row] &= ~bit
+            col_masks[col] &= ~bit
+            subgrid_masks[subgrid_index] &= ~bit
+
+            available &= available - 1  # Remove the lowest set bit
+
+        return False
+
+    # Start solving
+    return backtrack(grid)
 
 def is_valid_move(grid, row, col, num):
     """
